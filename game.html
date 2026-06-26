@@ -1,0 +1,303 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>¡Domina las Tablas de Multiplicar!</title>
+    <style>
+        :root {
+            --primary: #4CAF50;
+            --secondary: #FF9800;
+            --background: #E8F5E9;
+            --text: #2E7D32;
+        }
+
+        body {
+            font-family: 'Comic Sans MS', 'Chalkboard SE', sans-serif;
+            background-color: var(--background);
+            color: var(--text);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            margin: 0;
+        }
+
+        .card {
+            background: white;
+            padding: 30px;
+            border-radius: 20px;
+            box-shadow: 0 10px 20px rgba(0,0,0,0.1);
+            text-align: center;
+            width: 90%;
+            max-width: 500px;
+            box-sizing: border-box;
+        }
+
+        h1 { font-size: 2.5rem; margin-top: 0; color: #2E7D32; }
+        h2 { font-size: 2rem; }
+
+        .hidden { display: none !important; }
+
+        /* Pantalla de Selección */
+        .grid-tablas {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 15px;
+            margin-top: 20px;
+        }
+
+        button {
+            background-color: var(--primary);
+            color: white;
+            border: none;
+            padding: 15px;
+            font-size: 1.5rem;
+            border-radius: 12px;
+            cursor: pointer;
+            transition: transform 0.2s, background-color 0.2s;
+            font-family: inherit;
+        }
+
+        button:hover {
+            transform: scale(1.05);
+            background-color: #388E3C;
+        }
+
+        /* Pantalla de Juego */
+        .progreso-bar {
+            width: 100%;
+            background-color: #ddd;
+            height: 20px;
+            border-radius: 10px;
+            overflow: hidden;
+            margin-bottom: 20px;
+        }
+
+        .progreso-llenado {
+            width: 100%;
+            background-color: var(--secondary);
+            height: 100%;
+            transition: width 0.1s linear;
+        }
+
+        .operacion {
+            font-size: 4rem;
+            margin: 20px 0;
+            font-weight: bold;
+        }
+
+        .opciones {
+            display: flex;
+            flex-direction: column;
+            gap: 15px;
+        }
+
+        .btn-opcion {
+            background-color: #2196F3;
+            font-size: 1.8rem;
+        }
+        .btn-opcion:hover { background-color: #1976D2; }
+
+        /* Historial y Puntajes */
+        .puntaje {
+            font-size: 1.2rem;
+            margin-top: 20px;
+            font-weight: bold;
+        }
+
+        .btn-volver {
+            background-color: #757575;
+            margin-top: 20px;
+            font-size: 1rem;
+            padding: 10px 20px;
+        }
+        .btn-volver:hover { background-color: #616161; }
+    </style>
+</head>
+<body>
+
+    <div id="pantalla-seleccion" class="card">
+        <h1>¡Practica las Tablas! 🎮</h1>
+        <p>Elige qué tabla quieres repasar hoy:</p>
+        <div class="grid-tablas" id="contenedor-tablas"></div>
+        <div class="puntaje" id="record-total">Estrellas totales: 0 ⭐</div>
+    </div>
+
+    <div id="pantalla-juego" class="card hidden">
+        <div class="progreso-bar">
+            <div id="barra-tiempo" class="progreso-llenado"></div>
+        </div>
+        <div id="info-ronda">Pregunta 1 de 10</div>
+        <div class="operacion" id="texto-operacion">6 x 5</div>
+        <div class="opciones" id="contenedor-opciones"></div>
+        <button class="btn-volver" onclick="irAPantallaSeleccion()">Anular y volver</button>
+    </div>
+
+    <div id="pantalla-resultados" class="card hidden">
+        <h2>¡Fin del juego! 🎉</h2>
+        <p id="texto-resultado" style="font-size: 1.5rem;"></p>
+        <button onclick="irAPantallaSeleccion()">Jugar otra vez</button>
+    </div>
+
+    <script>
+        // --- CONFIGURACIÓN Y ESTADO ---
+        const TIEMPO_LIMITE = 8; // Segundos por pregunta
+        const PREGUNTAS_POR_RONDA = 10;
+        
+        let tablaSeleccionada = 1;
+        let preguntaActual = 0;
+        let aciertos = 0;
+        let numeroCorrecto = 0;
+        
+        let temporizador;
+        let tiempoRestante;
+        let progresoData = JSON.parse(localStorage.getItem('progresoTablas')) || {};
+
+        // --- INICIALIZACIÓN ---
+        window.onload = () => {
+            crearBotonesTablas();
+            actualizarPuntajeTotal();
+        };
+
+        function crearBotonesTablas() {
+            const contenedor = document.getElementById('contenedor-tablas');
+            contenedor.innerHTML = '';
+            for (let i = 1; i <= 10; i++) {
+                const btn = document.createElement('button');
+                const record = progresoData[i] ? ` (${progresoData[i]}/10 ⭐)` : '';
+                btn.innerText = `Tabla del ${i}${record}`;
+                btn.style.fontSize = '1.1rem';
+                btn.onclick = () => empezarJuego(i);
+                contenedor.appendChild(btn);
+            }
+        }
+
+        function actualizarPuntajeTotal() {
+            const total = Object.values(progresoData).reduce((a, b) => a + b, 0);
+            document.getElementById('record-total').innerText = `Estrellas totales conseguidas: ${total} ⭐`;
+        }
+
+        // --- LÓGICA DEL JUEGO ---
+        function empezarJuego(tabla) {
+            tablaSeleccionada = tabla;
+            preguntaActual = 0;
+            aciertos = 0;
+            
+            cambiarPantalla('pantalla-seleccion', 'pantalla-juego');
+            siguientePregunta();
+        }
+
+        function siguientePregunta() {
+            if (preguntaActual >= PREGUNTAS_POR_RONDA) {
+                finalizarJuego();
+                return;
+            }
+
+            preguntaActual++;
+            document.getElementById('info-ronda').innerText = `Pregunta ${preguntaActual} de ${PREGUNTAS_POR_RONDA}`;
+            
+            // Generar multiplicador aleatorio (1 al 10)
+            const multiplicador = Math.floor(Math.random() * 10) + 1;
+            numeroCorrecto = tablaSeleccionada * multiplicador;
+            
+            document.getElementById('texto-operacion').innerText = `${tablaSeleccionada} x ${multiplicador}`;
+            
+            generarOpciones(numeroCorrecto);
+            iniciarTemporizador();
+        }
+
+        function generarOpciones(correcta) {
+            const contenedor = document.getElementById('contenedor-opciones');
+            contenedor.innerHTML = '';
+
+            // Crear dos respuestas incorrectas creíbles
+            let incorrecta1 = correcta + (Math.random() > 0.5 ? tablaSeleccionada : -tablaSeleccionada);
+            let incorrecta2 = correcta + (Math.random() > 0.5 ? 2 : 5);
+
+            // Asegurar que no se repitan ni sean negativas
+            if (incorrecta1 === correcta || incorrecta1 < 0) incorrecta1 = correcta + 1;
+            if (incorrecta2 === correcta || incorrecta2 === incorrecta1 || incorrecta2 < 0) incorrecta2 = correcta + 3;
+
+            // Mezclar opciones
+            const opciones = [correcta, incorrecta1, incorrecta2].sort(() => Math.random() - 0.5);
+
+            opciones.forEach(num => {
+                const btn = document.createElement('button');
+                btn.className = 'btn-opcion';
+                btn.innerText = num;
+                btn.onclick = () => verificarRespuesta(num);
+                contenedor.appendChild(btn);
+            });
+        }
+
+        // --- TEMPORIZADOR ---
+        function iniciarTemporizador() {
+            clearInterval(temporizador);
+            tiempoRestante = TIEMPO_LIMITE * 10; // Multiplicamos por 10 para suavizar la barra de progreso
+            const barra = document.getElementById('barra-tiempo');
+            
+            temporizador = setInterval(() => {
+                tiempoRestante--;
+                const porcentaje = (tiempoRestante / (TIEMPO_LIMITE * 10)) * 100;
+                barra.style.width = `${porcentaje}%`;
+
+                if (tiempoRestante <= 0) {
+                    clearInterval(temporizador);
+                    bloquearOpciones();
+                    alert(`¡Se acabó el tiempo! La respuesta era ${numeroCorrecto}`);
+                    siguientePregunta();
+                }
+            }, 100);
+        }
+
+        // --- VERIFICACIÓN ---
+        function verificarRespuesta(elegido) {
+            clearInterval(temporizador);
+            bloquearOpciones();
+
+            if (elegido === numeroCorrecto) {
+                aciertos++;
+                alert('¡Correcto! 🌟');
+            } else {
+                alert(`¡Oh, casi! ${document.getElementById('texto-operacion').innerText} es ${numeroCorrecto}`);
+            }
+
+            siguientePregunta();
+        }
+
+        function bloquearOpciones() {
+            const botones = document.querySelectorAll('.btn-opcion');
+            botones.forEach(b => b.disabled = true);
+        }
+
+        // --- FIN DEL JUEGO Y GUARDADO ---
+        function finalizarJuego() {
+            cambiarPantalla('pantalla-juego', 'pantalla-resultados');
+            
+            document.getElementById('texto-resultado').innerText = `Lograste ${aciertos} de ${PREGUNTAS_POR_RONDA} respuestas correctas.`;
+
+            // Guardar en LocalStorage si mejora el récord actual de esa tabla
+            const recordActual = progresoData[tablaSeleccionada] || 0;
+            if (aciertos > recordActual) {
+                progresoData[tablaSeleccionada] = aciertos;
+                localStorage.setItem('progresoTablas', JSON.stringify(progresoData));
+            }
+
+            crearBotonesTablas();
+            actualizarPuntajeTotal();
+        }
+
+        function irAPantallaSeleccion() {
+            clearInterval(temporizador);
+            cambiarPantalla('pantalla-juego', 'pantalla-seleccion');
+            cambiarPantalla('pantalla-resultados', 'pantalla-seleccion');
+        }
+
+        function cambiarPantalla(ocultarId, mostrarId) {
+            document.getElementById(ocultarId).classList.add('hidden');
+            document.getElementById(mostrarId).classList.remove('hidden');
+        }
+    </script>
+</body>
+</html>
